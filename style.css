@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100b18">
+  <title>DEX.TECH Marketplace</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header>
+    <a class="logo" href="#">DEX<span>.TECH</span></a>
+    <button id="loginBtn">Inloggen</button>
+    <button id="logoutBtn" hidden>Uitloggen</button>
+    <button id="newAdBtn">+ Advertentie</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">HARDWARE MARKETPLACE</p>
+      <h1>Hardware vinden.<br><span>Builds beginnen.</span></h1>
+      <input id="searchInput" placeholder="Zoek GPU's, CPU's, pc's...">
+      <select id="categoryFilter">
+        <option value="">Alle categorieën</option>
+        <option>GPU</option>
+        <option>CPU</option>
+        <option>RAM</option>
+        <option>Opslag</option>
+        <option>Moederbord</option>
+        <option>Complete pc</option>
+        <option>Accessoires</option>
+        <option>Overig</option>
+      </select>
+      <select id="sortFilter">
+        <option value="newest">Nieuwste eerst</option>
+        <option value="low">Goedkoopste eerst</option>
+        <option value="high">Duurste eerst</option>
+      </select>
+    </section>
+
+    <h2>Advertenties <small id="resultCount"></small></h2>
+    <p id="status">DEX.TECH wordt geladen...</p>
+    <section id="adsGrid" class="ads-grid"></section>
+  </main>
+
+  <dialog id="authDialog">
+    <form id="authForm">
+      <button type="button" data-close="authDialog">Sluiten</button>
+      <h2 id="authTitle">Inloggen</h2>
+      <input id="authEmail" type="email" placeholder="E-mailadres" required>
+      <input id="authPassword" type="password"
+        placeholder="Wachtwoord (min. 8 tekens)"
+        minlength="8" required>
+      <button id="authSubmit">Inloggen</button>
+      <button id="switchAuth" type="button">Account maken</button>
+      <p id="authFeedback"></p>
+    </form>
+  </dialog>
+
+  <dialog id="adDialog">
+    <form id="adForm">
+      <button type="button" data-close="adDialog">Sluiten</button>
+      <h2>Advertentie plaatsen</h2>
+      <input id="adTitle" placeholder="Productnaam" maxlength="90" required>
+      <select id="adCategory" required>
+        <option>GPU</option><option>CPU</option><option>RAM</option>
+        <option>Opslag</option><option>Moederbord</option>
+        <option>Complete pc</option><option>Accessoires</option><option>Overig</option>
+      </select>
+      <input id="adPrice" type="number" min="0" max="100000"
+        step="0.01" placeholder="Prijs in euro's" required>
+      <textarea id="adDescription" minlength="10" maxlength="1500"
+        placeholder="Beschrijving en staat van het product" required></textarea>
+      <input id="adImage" type="file" accept="image/jpeg,image/png,image/webp">
+      <button type="submit">Advertentie plaatsen</button>
+      <p id="adFeedback"></p>
+    </form>
+  </dialog>
+
+  <dialog id="messageDialog">
+    <form id="messageForm">
+      <button type="button" data-close="messageDialog">Sluiten</button>
+      <h2 id="messageTitle">Contact met verkoper</h2>
+      <input id="messageAdId" type="hidden">
+      <input id="messageSellerId" type="hidden">
+      <textarea id="messageBody" minlength="3" maxlength="1500"
+        placeholder="Schrijf je bericht..." required></textarea>
+      <button type="submit">Bericht versturen</button>
+      <p id="messageFeedback"></p>
+    </form>
+  </dialog>
+
+  <dialog id="inboxDialog">
+    <button type="button" data-close="inboxDialog">Sluiten</button>
+    <h2>Mijn berichten</h2>
+    <div id="inboxList"></div>
+  </dialog>
+
+  <footer>DEX.TECH · Gebouwd voor de hardware-community 💜</footer>
+</body>
+</html>
