@@ -1,1 +1,476 @@
+/* ==========================================
+DEX.TECH MARKETPLACE 2.0
+JavaScript + Supabase
+========================================== */
 
+// Vul deze gegevens in vanuit je eigen Supabase-project.
+const SUPABASE_URL = "VUL_HIER_JE_SUPABASE_URL_IN";
+const SUPABASE_KEY = "VUL_HIER_JE_PUBLIEKE_ANON_OF_PUBLISHABLE_KEY_IN";
+
+const supabaseReady =
+SUPABASE_URL.startsWith("https://") &&
+!SUPABASE_URL.includes("VUL_HIER") &&
+!SUPABASE_KEY.includes("VUL_HIER") &&
+typeof window.supabase !== "undefined";
+
+const db = supabaseReady
+? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+: null;
+
+const $ = (id) => document.getElementById(id);
+
+let currentUser = null;
+let allAds = [];
+let authMode = "login";
+
+function status(message) {
+$("status").textContent = message;
+}
+
+function feedback(id, message) {
+const el = $(id);
+if (el) el.textContent = message;
+}
+
+function money(value) {
+return new Intl.NumberFormat("nl-NL", {
+style: "currency",
+currency: "EUR"
+}).format(Number(value) || 0);
+}
+
+function escapeHTML(value = "") {
+return String(value).replace(/[&<>"']/g, (char) => ({
+"&": "&",
+"<": "<",
+">": ">",
+'"': """,
+"'": "'"
+})[char]);
+}
+
+function openDialog(id) {
+const dialog = $(id);
+if (dialog && !dialog.open) dialog.showModal();
+}
+
+function closeDialog(id) {
+const dialog = $(id);
+if (dialog?.open) dialog.close();
+}
+
+// Close buttons
+document.querySelectorAll("[data-close]").forEach((button) => {
+button.addEventListener("click", () => {
+closeDialog(button.dataset.close);
+});
+});
+
+// Search, category filter and sorting
+["searchInput", "categoryFilter", "sortFilter"].forEach((id) => {
+$(id).addEventListener("input", renderAds);
+});
+
+function renderAds() {
+const search = $("searchInput").value.trim().toLowerCase();
+const category = $("categoryFilter").value;
+const sort = $("sortFilter").value;
+
+let ads = allAds.filter((ad) => {
+const text = [
+ad.title,
+ad.description,
+ad.category
+].join(" ").toLowerCase();
+
+return text.includes(search) &&
+  (!category || ad.category === category);
+
+});
+
+if (sort === "low") ads.sort((a, b) => Number(a.price) - Number(b.price));
+if (sort === "high") ads.sort((a, b) => Number(b.price) - Number(a.price));
+if (sort === "newest") {
+ads.sort((a, b) =>
+new Date(b.created_at || 0) - new Date(a.created_at || 0)
+);
+}
+
+$("resultCount").textContent = "(${ads.length})";
+const grid = $("adsGrid");
+grid.replaceChildren();
+
+if (!ads.length) {
+const empty = document.createElement("p");
+empty.className = "empty-state";
+empty.textContent = allAds.length
+? "Geen advertenties gevonden. Probeer een andere zoekopdracht."
+: "Nog geen advertenties. Kom later terug!";
+grid.appendChild(empty);
+return;
+}
+
+ads.forEach((ad) => {
+const card = document.createElement("article");
+card.className = "ad-card";
+
+const image = ad.image_url
+  ? `<img src="${escapeHTML(ad.image_url)}" alt="${escapeHTML(ad.title)}" loading="lazy">`
+  : "";
+
+const contactButton = currentUser && currentUser.id !== ad.user_id
+  ? `<button type="button" data-contact="${escapeHTML(ad.id)}" data-seller="${escapeHTML(ad.user_id)}" data-title="${escapeHTML(ad.title)}">Contact</button>`
+  : "";
+
+const ownLabel = currentUser && currentUser.id === ad.user_id
+  ? "<p>Jouw advertentie</p>"
+  : "";
+
+card.innerHTML = `
+  ${image}
+  <div class="card-body">
+    <span class="category">${escapeHTML(ad.category)}</span>
+    <h3>${escapeHTML(ad.title)}</h3>
+    <p class="price">${money(ad.price)}</p>
+    <p>${escapeHTML(ad.description)}</p>
+    ${ownLabel}
+    <div class="card-actions">${contactButton}</div>
+  </div>
+`;
+
+grid.appendChild(card);
+
+});
+}
+
+// Contact seller
+$("adsGrid").addEventListener("click", (event) => {
+const button = event.target.closest("[data-contact]");
+if (!button) return;
+
+if (!currentUser) {
+feedback("authFeedback", "Log eerst in om een verkoper te berichten.");
+openDialog("authDialog");
+return;
+}
+
+$("messageAdId").value = button.dataset.contact;
+$("messageSellerId").value = button.dataset.seller;
+$("messageTitle").textContent = "Contact: " + button.dataset.title;
+$("messageBody").value = "";
+feedback("messageFeedback", "");
+openDialog("messageDialog");
+});
+
+// Authentication
+function updateAuthUI() {
+$("loginBtn").hidden = !!currentUser;
+$("logoutBtn").hidden = !currentUser;
+
+$("newAdBtn").textContent = currentUser
+? "+ Advertentie"
+: "Inloggen om te verkopen";
+
+let inboxButton = $("inboxBtn");
+if (!inboxButton) {
+inboxButton = document.createElement("button");
+inboxButton.id = "inboxBtn";
+inboxButton.textContent = "Mijn berichten";
+$("logoutBtn").insertAdjacentElement("afterend", inboxButton);
+inboxButton.addEventListener("click", loadInbox);
+}
+
+inboxButton.hidden = !currentUser;
+}
+
+$("loginBtn").addEventListener("click", () => {
+authMode = "login";
+$("authTitle").textContent = "Inloggen";
+$("authSubmit").textContent = "Inloggen";
+$("switchAuth").textContent = "Account maken";
+feedback("authFeedback", "");
+openDialog("authDialog");
+});
+
+$("switchAuth").addEventListener("click", () => {
+authMode = authMode === "login" ? "signup" : "login";
+$("authTitle").textContent = authMode === "login"
+? "Inloggen"
+: "Account maken";
+$("authSubmit").textContent = authMode === "login"
+? "Inloggen"
+: "Account maken";
+$("switchAuth").textContent = authMode === "login"
+? "Account maken"
+: "Ik heb al een account";
+feedback("authFeedback", "");
+});
+
+$("authForm").addEventListener("submit", async (event) => {
+event.preventDefault();
+
+if (!db) {
+feedback("authFeedback", "Stel eerst je Supabase-URL en publieke sleutel in.");
+return;
+}
+
+const email = $("authEmail").value.trim();
+const password = $("authPassword").value;
+
+$("authSubmit").disabled = true;
+feedback("authFeedback", "Even controleren...");
+
+try {
+const result = authMode === "signup"
+? await db.auth.signUp({ email, password })
+: await db.auth.signInWithPassword({ email, password });
+
+if (result.error) throw result.error;
+
+if (authMode === "signup" && !result.data.session) {
+  feedback(
+    "authFeedback",
+    "Account aangemaakt! Controleer je e-mail als bevestiging vereist is."
+  );
+  return;
+}
+
+currentUser = result.data.user;
+updateAuthUI();
+closeDialog("authDialog");
+await loadAds();
+
+} catch (error) {
+feedback("authFeedback", error.message || "Inloggen is mislukt.");
+} finally {
+$("authSubmit").disabled = false;
+}
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+if (!db) return;
+
+const { error } = await db.auth.signOut();
+if (error) {
+status("Uitloggen mislukt: " + error.message);
+return;
+}
+
+currentUser = null;
+updateAuthUI();
+await loadAds();
+});
+
+// New listing
+$("newAdBtn").addEventListener("click", () => {
+if (!currentUser) {
+authMode = "login";
+$("authTitle").textContent = "Inloggen";
+$("authSubmit").textContent = "Inloggen";
+$("switchAuth").textContent = "Account maken";
+openDialog("authDialog");
+return;
+}
+
+$("adForm").reset();
+feedback("adFeedback", "");
+openDialog("adDialog");
+});
+
+$("adForm").addEventListener("submit", async (event) => {
+event.preventDefault();
+
+if (!db || !currentUser) {
+feedback("adFeedback", "Log in en stel Supabase in voordat je een advertentie plaatst.");
+return;
+}
+
+const submit = $("adForm").querySelector('[type="submit"]');
+submit.disabled = true;
+feedback("adFeedback", "Advertentie wordt geplaatst...");
+
+try {
+let imageUrl = null;
+const file = $("adImage").files[0];
+
+if (file) {
+  const allowed = ["image/jpeg", "image/png", "image/webp"];
+  if (!allowed.includes(file.type)) {
+    throw new Error("Gebruik een JPG-, PNG- of WEBP-afbeelding.");
+  }
+
+  if (file.size > 3 * 1024 * 1024) {
+    throw new Error("De foto mag maximaal 3 MB groot zijn.");
+  }
+
+  const extension = file.type === "image/png" ? "png"
+    : file.type === "image/webp" ? "webp" : "jpg";
+  const path = `${currentUser.id}/${crypto.randomUUID()}.${extension}`;
+
+  const { error: uploadError } = await db.storage
+    .from("ad-images")
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = db.storage.from("ad-images").getPublicUrl(path);
+  imageUrl = data.publicUrl;
+}
+
+const ad = {
+  user_id: currentUser.id,
+  title: $("adTitle").value.trim(),
+  category: $("adCategory").value,
+  price: Number($("adPrice").value),
+  description: $("adDescription").value.trim(),
+  image_url: imageUrl
+};
+
+const { error } = await db.from("ads").insert(ad);
+if (error) throw error;
+
+closeDialog("adDialog");
+await loadAds();
+status("Je advertentie is geplaatst!");
+
+} catch (error) {
+feedback("adFeedback", error.message || "Plaatsen is mislukt.");
+} finally {
+submit.disabled = false;
+}
+});
+
+// Messages
+$("messageForm").addEventListener("submit", async (event) => {
+event.preventDefault();
+
+if (!db || !currentUser) {
+feedback("messageFeedback", "Log in om een bericht te versturen.");
+return;
+}
+
+const sellerId = $("messageSellerId").value;
+if (sellerId === currentUser.id) {
+feedback("messageFeedback", "Je kunt jezelf geen bericht sturen.");
+return;
+}
+
+const submit = $("messageForm").querySelector('[type="submit"]');
+submit.disabled = true;
+feedback("messageFeedback", "Bericht wordt verstuurd...");
+
+try {
+const { error } = await db.from("messages").insert({
+ad_id: $("messageAdId").value,
+sender_id: currentUser.id,
+receiver_id: sellerId,
+body: $("messageBody").value.trim()
+});
+
+if (error) throw error;
+
+closeDialog("messageDialog");
+status("Bericht verstuurd!");
+
+} catch (error) {
+feedback("messageFeedback", error.message || "Versturen is mislukt.");
+} finally {
+submit.disabled = false;
+}
+});
+
+// Inbox
+async function loadInbox() {
+if (!db || !currentUser) return;
+
+openDialog("inboxDialog");
+$("inboxList").textContent = "Berichten laden...";
+
+const { data, error } = await db
+.from("messages")
+.select("id, ad_id, sender_id, receiver_id, body, created_at")
+.or("sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}")
+.order("created_at", { ascending: false })
+.limit(50);
+
+const list = $("inboxList");
+list.replaceChildren();
+
+if (error) {
+list.textContent = "Berichten konden niet worden geladen: " + error.message;
+return;
+}
+
+if (!data?.length) {
+list.textContent = "Je hebt nog geen berichten.";
+return;
+}
+
+data.forEach((message) => {
+const item = document.createElement("article");
+item.className = "message-item";
+
+const heading = document.createElement("strong");
+heading.textContent = message.sender_id === currentUser.id
+  ? "Door jou verzonden"
+  : "Ontvangen bericht";
+
+const body = document.createElement("p");
+body.textContent = message.body;
+
+const date = document.createElement("small");
+date.textContent = message.created_at
+  ? new Date(message.created_at).toLocaleString("nl-NL")
+  : "";
+
+item.append(heading, body, date);
+list.appendChild(item);
+
+});
+}
+
+// Load advertisements
+async function loadAds() {
+if (!db) {
+allAds = [];
+renderAds();
+status("Supabase is nog niet ingesteld. Vul de URL en publieke sleutel in en maak de database aan.");
+updateAuthUI();
+return;
+}
+
+status("Advertenties laden...");
+
+const { data: authData } = await db.auth.getUser();
+currentUser = authData?.user || null;
+updateAuthUI();
+
+const { data, error } = await db
+.from("ads")
+.select("id, user_id, title, category, price, description, image_url, created_at")
+.order("created_at", { ascending: false })
+.limit(100);
+
+if (error) {
+allAds = [];
+renderAds();
+status("Advertenties konden niet worden geladen. Controleer de Supabase-tabellen en toegangsregels.");
+console.error(error);
+return;
+}
+
+allAds = data || [];
+renderAds();
+status("DEX.TECH is klaar!");
+}
+
+// React to login/logout in another tab
+if (db) {
+db.auth.onAuthStateChange((_event, session) => {
+currentUser = session?.user || null;
+updateAuthUI();
+});
+}
+
+updateAuthUI();
+loadAds();
